@@ -4,7 +4,7 @@ import json
 import math
 import os
 import pathlib
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 
 _DEFAULT_NUM_PARALLEL_TRAILS = 35
 _DEFAULT_STAGE_2_NUM_SELECTED_TRAILS = 5
@@ -793,5 +793,175 @@ def get_wide_and_deep_trainer_pipeline_and_parameters(  # pylint:disable=dangero
   pipeline_definition_path = os.path.join(
       pathlib.Path(__file__).parent.resolve(),
       'wide_and_deep_trainer_pipeline.json')
+
+  return pipeline_definition_path, parameter_values
+
+
+def get_builtin_algorithm_hyperparameter_tuning_job_pipeline_and_parameters(  # pylint:disable=dangerous-default-value
+    project: str,
+    location: str,
+    root_dir: str,
+    algorithm_name: str,
+    target_column_name: str,
+    prediction_type: str,
+    transformations: Dict[str, Any],
+    split_spec: Dict[str, Any],
+    data_source: Dict[str, Any],
+    study_spec_metrics: List[Dict[str, Any]],
+    study_spec_parameters: List[Dict[str, Any]],
+    max_trial_count: int,
+    parallel_trial_count: int,
+    enable_profiler: bool = False,
+    seed: int = 1,
+    weight_column_name: str = '',
+    max_failed_trial_count: int = 0,
+    study_spec_algorithm: str = 'ALGORITHM_UNSPECIFIED',
+    study_spec_measurement_selection_type: str = 'BEST_MEASUREMENT',
+    stats_and_example_gen_dataflow_machine_type: str = 'n1-standard-16',
+    stats_and_example_gen_dataflow_max_num_workers: int = 25,
+    stats_and_example_gen_dataflow_disk_size_gb: int = 40,
+    transform_dataflow_machine_type: str = 'n1-standard-16',
+    transform_dataflow_max_num_workers: int = 25,
+    transform_dataflow_disk_size_gb: int = 40,
+    training_machine_spec: Dict[str, Any] = {'machine_type': 'n1-standard-16'},
+    training_replica_count: int = 1,
+    dataflow_subnetwork: str = '',
+    dataflow_use_public_ips: bool = True,
+    encryption_spec_key_name: str = '') -> Tuple[str, Dict[str, Any]]:
+  """Get the built-in algorithm HyperparameterTuningJob pipeline.
+
+  Args:
+    project: The GCP project that runs the pipeline components.
+    location: The GCP region that runs the pipeline components.
+    root_dir: The root GCS directory for the pipeline components.
+    algorithm_name: The name of the algorithm. One of 'TabNet' or 'Wide & Deep'.
+    target_column_name: The target column name.
+    prediction_type: The type of prediction the Model is to produce.
+      "classification" or "regression".
+    transformations: The transformations to apply.
+    split_spec: The split spec.
+    data_source: The data source.
+    study_spec_metrics: List of dictionaries representing metrics to optimize.
+      The dictionary contains the metric_id, which is reported by the training
+      job, ands the optimization goal of the metric. One of 'minimize' or
+      'maximize'.
+    study_spec_parameters: List of dictionaries representing parameters to
+      optimize. The dictionary key is the parameter_id, which is passed to
+      training job as a command line argument, and the dictionary value is the
+      parameter specification of the metric.
+    max_trial_count: The desired total number of trials.
+    parallel_trial_count: The desired number of trials to run in parallel.
+    enable_profiler: Enables profiling and saves a trace during evaluation.
+    seed: Seed to be used for this run.
+    weight_column_name: The weight column name.
+    max_failed_trial_count: The number of failed trials that need to be seen
+      before failing the HyperparameterTuningJob. If set to 0, Vertex AI decides
+      how many trials must fail before the whole job fails.
+    study_spec_algorithm: The search algorithm specified for the study. One of
+      'ALGORITHM_UNSPECIFIED', 'GRID_SEARCH', or 'RANDOM_SEARCH'.
+    study_spec_measurement_selection_type:  Which measurement to use if/when the
+      service automatically selects the final measurement from previously
+      reported intermediate measurements. One of 'BEST_MEASUREMENT' or
+      'LAST_MEASUREMENT'.
+    stats_and_example_gen_dataflow_machine_type: The dataflow machine type for
+      stats_and_example_gen component.
+    stats_and_example_gen_dataflow_max_num_workers: The max number of Dataflow
+      workers for stats_and_example_gen component.
+    stats_and_example_gen_dataflow_disk_size_gb: Dataflow worker's disk size in
+      GB for stats_and_example_gen component.
+    transform_dataflow_machine_type: The dataflow machine type for transform
+      component.
+    transform_dataflow_max_num_workers: The max number of Dataflow workers for
+      transform component.
+    transform_dataflow_disk_size_gb: Dataflow worker's disk size in GB for
+      transform component.
+    training_machine_spec: The machine spec for trainer component.
+    training_replica_count: The replica count for the trainer component.
+    dataflow_subnetwork: Dataflow's fully qualified subnetwork name, when empty
+      the default
+      subnetwork will be used. Example:
+        https://cloud.google.com/dataflow/docs/guides/specifying-networks#example_network_and_subnetwork_specifications
+    dataflow_use_public_ips: Specifies whether Dataflow workers use public IP
+      addresses.
+    encryption_spec_key_name: The KMS key name.
+
+  Returns:
+    Tuple of pipeline_definiton_path and parameter_values.
+  """
+  if algorithm_name == 'TabNet':
+    image_uri = 'us-docker.pkg.dev/vertex-ai-restricted/automl-tabular/tabnet-training:prod'
+  elif algorithm_name == 'Wide & Deep':
+    image_uri = 'us-docker.pkg.dev/vertex-ai-restricted/automl-tabular/wide-and-deep-training:prod'
+  else:
+    raise ValueError(
+        'Invalid input for algorithm_name. Supported values are `TabNet` or `Wide & Deep`.'
+    )
+
+  parameter_values = {
+      'project':
+          project,
+      'location':
+          location,
+      'image_uri':
+          image_uri,
+      'root_dir':
+          root_dir,
+      'target_column_name':
+          target_column_name,
+      'prediction_type':
+          prediction_type,
+      'transformations':
+          input_dictionary_to_parameter(transformations),
+      'split_spec':
+          input_dictionary_to_parameter(split_spec),
+      'data_source':
+          input_dictionary_to_parameter(data_source),
+      'study_spec_metrics':
+          study_spec_metrics,
+      'study_spec_parameters':
+          study_spec_parameters,
+      'max_trial_count':
+          max_trial_count,
+      'parallel_trial_count':
+          parallel_trial_count,
+      'enable_profiler':
+          enable_profiler,
+      'seed':
+          seed,
+      'weight_column_name':
+          weight_column_name,
+      'max_failed_trial_count':
+          max_failed_trial_count,
+      'study_spec_algorithm':
+          study_spec_algorithm,
+      'study_spec_measurement_selection_type':
+          study_spec_measurement_selection_type,
+      'stats_and_example_gen_dataflow_machine_type':
+          stats_and_example_gen_dataflow_machine_type,
+      'stats_and_example_gen_dataflow_max_num_workers':
+          stats_and_example_gen_dataflow_max_num_workers,
+      'stats_and_example_gen_dataflow_disk_size_gb':
+          stats_and_example_gen_dataflow_disk_size_gb,
+      'transform_dataflow_machine_type':
+          transform_dataflow_machine_type,
+      'transform_dataflow_max_num_workers':
+          transform_dataflow_max_num_workers,
+      'transform_dataflow_disk_size_gb':
+          transform_dataflow_disk_size_gb,
+      'training_machine_spec':
+          training_machine_spec,
+      'training_replica_count':
+          training_replica_count,
+      'dataflow_subnetwork':
+          dataflow_subnetwork,
+      'dataflow_use_public_ips':
+          dataflow_use_public_ips,
+      'encryption_spec_key_name':
+          encryption_spec_key_name,
+  }
+
+  pipeline_definition_path = os.path.join(
+      pathlib.Path(__file__).parent.resolve(),
+      'builtin_algorithm_hyperparameter_tuning_job_pipeline.json')
 
   return pipeline_definition_path, parameter_values

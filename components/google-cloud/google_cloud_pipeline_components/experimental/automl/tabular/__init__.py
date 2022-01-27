@@ -44,3 +44,7 @@ FinalizerOp = load_component_from_file(
     os.path.join(os.path.dirname(__file__), 'finalizer.yaml'))
 WideAndDeepTrainerOp = load_component_from_file(
     os.path.join(os.path.dirname(__file__), 'wide_and_deep_trainer.yaml'))
+BuiltinAlgorithmHyperparameterTuningJobOp = load_component_from_file(
+    os.path.join(
+        os.path.dirname(__file__),
+        'builtin_algorithm_hyperparameter_tuning_job.yaml'))
