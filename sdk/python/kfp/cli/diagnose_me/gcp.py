@@ -1,4 +1,3 @@
-# Lint as: python3
 # Copyright 2019 The Kubeflow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License,Version 2.0 (the "License");
@@ -15,7 +14,8 @@
 """Functions for collecting GCP related environment configurations."""
 
 import enum
-from typing import List, Text, Optional
+from typing import List, Optional, Text
+
 from kfp.cli.diagnose_me import utility
 
 
@@ -97,9 +97,7 @@ def execute_gsutil_command(
     Returns:
       utility.ExecutorResponse with outputs from stdout,stderr and execution code.
     """
-    command_list = ['gsutil']
-    command_list.extend(gsutil_command_list)
-
+    command_list = ['gsutil', *gsutil_command_list]
     if project_id is not None:
         command_list.extend(['-p', project_id])
 

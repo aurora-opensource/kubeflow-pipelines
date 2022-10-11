@@ -19,10 +19,10 @@
 # To output a directory, create a new directory at the output path location.
 import os
 
-import kfp
-from kfp.components import create_component_from_func, load_component_from_text, InputPath, OutputPath
-import kfp.v2 as v2
-from kfp.v2.dsl import Input, Output, Artifact
+import kfp.deprecated as kfp
+from kfp.deprecated.components import create_component_from_func, load_component_from_text, InputPath, OutputPath
+import kfp as v2
+from kfp.dsl import Input, Output, Artifact
 
 # Outputting directories from Python-based components:
 

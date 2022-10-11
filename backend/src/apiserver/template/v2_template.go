@@ -6,6 +6,7 @@ import (
 
 	structpb "github.com/golang/protobuf/ptypes/struct"
 
+	"github.com/ghodss/yaml"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	api "github.com/kubeflow/pipelines/backend/api/go_client"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
@@ -34,18 +35,25 @@ func (t *V2Spec) ScheduledWorkflow(apiJob *api.Job) (*scheduledworkflow.Schedule
 		return nil, util.Wrap(err, "Failed to convert to PipelineJob RuntimeConfig")
 	}
 	job.RuntimeConfig = jobRuntimeConfig
-	wf, err := argocompiler.Compile(job, nil)
+	obj, err := argocompiler.Compile(job, nil)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to compile job")
 	}
-	workflow := util.NewWorkflow(wf)
-	setDefaultServiceAccount(workflow, apiJob.GetServiceAccount())
+	// currently, there is only Argo implementation, so it's using `ArgoWorkflow` for now
+	// later on, if a new runtime support will be added, we need a way to switch/specify
+	// runtime. i.e using ENV var
+	executionSpec, err := util.NewExecutionSpecFromInterface(util.ArgoWorkflow, obj)
+	if err != nil {
+		return nil, util.NewInternalServerError(err, "not Workflow struct")
+	}
+	setDefaultServiceAccount(executionSpec, apiJob.GetServiceAccount())
 	// Disable istio sidecar injection if not specified
-	workflow.SetAnnotationsToAllTemplatesIfKeyNotExist(util.AnnotationKeyIstioSidecarInject, util.AnnotationValueIstioSidecarInjectDisabled)
+	executionSpec.SetAnnotationsToAllTemplatesIfKeyNotExist(util.AnnotationKeyIstioSidecarInject, util.AnnotationValueIstioSidecarInjectDisabled)
 	swfGeneratedName, err := toSWFCRDResourceGeneratedName(apiJob.Name)
 	if err != nil {
 		return nil, util.Wrap(err, "Create job failed")
 	}
+
 	scheduledWorkflow := &scheduledworkflow.ScheduledWorkflow{
 		ObjectMeta: metav1.ObjectMeta{GenerateName: swfGeneratedName},
 		Spec: scheduledworkflow.ScheduledWorkflowSpec{
@@ -54,7 +62,7 @@ func (t *V2Spec) ScheduledWorkflow(apiJob *api.Job) (*scheduledworkflow.Schedule
 			Trigger:        *toCRDTrigger(apiJob.Trigger),
 			Workflow: &scheduledworkflow.WorkflowResource{
 				Parameters: toCRDParameter(apiJob.GetPipelineSpec().GetParameters()),
-				Spec:       workflow.Spec,
+				Spec:       executionSpec.ToStringForSchedule(),
 			},
 			NoCatchup: util.BoolPointer(apiJob.NoCatchup),
 		},
@@ -68,7 +76,11 @@ func (t *V2Spec) GetTemplateType() TemplateType {
 
 func NewV2SpecTemplate(template []byte) (*V2Spec, error) {
 	var spec pipelinespec.PipelineSpec
-	err := protojson.Unmarshal(template, &spec)
+	templateJson, err := yaml.YAMLToJSON(template)
+	if err != nil {
+		return nil, util.NewInvalidInputErrorWithDetails(ErrorInvalidPipelineSpec, fmt.Sprintf("cannot convert v2 pipeline spec to json format: %s", err.Error()))
+	}
+	err = protojson.Unmarshal(templateJson, &spec)
 	if err != nil {
 		return nil, util.NewInvalidInputErrorWithDetails(ErrorInvalidPipelineSpec, fmt.Sprintf("invalid v2 pipeline spec: %s", err.Error()))
 	}
@@ -91,10 +103,15 @@ func (t *V2Spec) Bytes() []byte {
 	}
 	bytes, err := protojson.Marshal(t.spec)
 	if err != nil {
-		// this is unexpected
+		// this is unexpected, cannot convert proto message to JSON
 		return nil
 	}
-	return bytes
+	bytesYAML, err := yaml.JSONToYAML(bytes)
+	if err != nil {
+		// this is unexpected, cannot convert JSON to YAML
+		return nil
+	}
+	return bytesYAML
 }
 
 func (t *V2Spec) IsV2() bool {
@@ -126,7 +143,7 @@ func (t *V2Spec) ParametersJSON() (string, error) {
 	return "[]", nil
 }
 
-func (t *V2Spec) RunWorkflow(apiRun *api.Run, options RunWorkflowOptions) (*util.Workflow, error) {
+func (t *V2Spec) RunWorkflow(apiRun *api.Run, options RunWorkflowOptions) (util.ExecutionSpec, error) {
 	bytes, err := protojson.Marshal(t.spec)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed marshal pipeline spec to json")
@@ -141,24 +158,26 @@ func (t *V2Spec) RunWorkflow(apiRun *api.Run, options RunWorkflowOptions) (*util
 		return nil, util.Wrap(err, "Failed to convert to PipelineJob RuntimeConfig")
 	}
 	job.RuntimeConfig = jobRuntimeConfig
-	wf, err := argocompiler.Compile(job, nil)
+	obj, err := argocompiler.Compile(job, nil)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to compile job")
 	}
-	workflow := util.NewWorkflow(wf)
-	setDefaultServiceAccount(workflow, apiRun.GetServiceAccount())
+	executionSpec, err := util.NewExecutionSpecFromInterface(util.ArgoWorkflow, obj)
+	if err != nil {
+		return nil, util.NewInternalServerError(err, "not Workflow struct")
+	}
+	setDefaultServiceAccount(executionSpec, apiRun.GetServiceAccount())
 	// Disable istio sidecar injection if not specified
-	workflow.SetAnnotationsToAllTemplatesIfKeyNotExist(util.AnnotationKeyIstioSidecarInject, util.AnnotationValueIstioSidecarInjectDisabled)
+	executionSpec.SetAnnotationsToAllTemplatesIfKeyNotExist(util.AnnotationKeyIstioSidecarInject, util.AnnotationValueIstioSidecarInjectDisabled)
 	// Add label to the workflow so it can be persisted by persistent agent later.
-	workflow.SetLabels(util.LabelKeyWorkflowRunId, options.RunId)
+	executionSpec.SetLabels(util.LabelKeyWorkflowRunId, options.RunId)
 	// Add run name annotation to the workflow so that it can be logged by the Metadata Writer.
-	workflow.SetAnnotations(util.AnnotationKeyRunName, apiRun.Name)
+	executionSpec.SetAnnotations(util.AnnotationKeyRunName, apiRun.Name)
 	// Replace {{workflow.uid}} with runId
-	err = workflow.ReplaceUID(options.RunId)
+	err = executionSpec.ReplaceUID(options.RunId)
 	if err != nil {
 		return nil, util.NewInternalServerError(err, "Failed to replace workflow ID")
 	}
-	workflow.SetPodMetadataLabels(util.LabelKeyWorkflowRunId, options.RunId)
-	return workflow, nil
-
+	executionSpec.SetPodMetadataLabels(util.LabelKeyWorkflowRunId, options.RunId)
+	return executionSpec, nil
 }

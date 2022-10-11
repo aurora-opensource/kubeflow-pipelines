@@ -20,7 +20,6 @@ import userEvent from '@testing-library/user-event';
 import * as React from 'react';
 import { ApiRelationship, ApiResourceType } from 'src/apis/run';
 import { RoutePage, RouteParams } from 'src/components/Router';
-import * as v2PipelineSpec from 'src/data/test/mock_lightweight_python_functions_v2_pipeline.json';
 import { Apis } from 'src/lib/Apis';
 import { Api } from 'src/mlmd/Api';
 import { KFP_V2_RUN_CONTEXT_TYPE } from 'src/mlmd/MlmdUtils';
@@ -39,6 +38,10 @@ import {
 import { PageProps } from './Page';
 import { RunDetailsInternalProps } from './RunDetails';
 import { RunDetailsV2 } from './RunDetailsV2';
+import fs from 'fs';
+
+const V2_PIPELINESPEC_PATH = 'src/data/test/lightweight_python_functions_v2_pipeline_rev.yaml';
+const v2YamlTemplateString = fs.readFileSync(V2_PIPELINESPEC_PATH, 'utf8');
 
 testBestPractices();
 describe('RunDetailsV2', () => {
@@ -86,6 +89,7 @@ describe('RunDetailsV2', () => {
       pipeline_spec: {
         parameters: [{ name: 'param1', value: 'value1' }],
         pipeline_id: 'some-pipeline-id',
+        pipeline_manifest: '{some-template-string}',
       },
       resource_references: [
         {
@@ -120,7 +124,7 @@ describe('RunDetailsV2', () => {
     render(
       <CommonTestWrapper>
         <RunDetailsV2
-          pipeline_job={JSON.stringify(v2PipelineSpec)}
+          pipeline_job={v2YamlTemplateString}
           runDetail={TEST_RUN}
           {...generateProps()}
         ></RunDetailsV2>
@@ -137,7 +141,7 @@ describe('RunDetailsV2', () => {
     render(
       <CommonTestWrapper>
         <RunDetailsV2
-          pipeline_job={JSON.stringify(v2PipelineSpec)}
+          pipeline_job={v2YamlTemplateString}
           runDetail={TEST_RUN}
           {...generateProps()}
         ></RunDetailsV2>
@@ -182,7 +186,7 @@ describe('RunDetailsV2', () => {
     render(
       <CommonTestWrapper>
         <RunDetailsV2
-          pipeline_job={JSON.stringify(v2PipelineSpec)}
+          pipeline_job={v2YamlTemplateString}
           runDetail={TEST_RUN}
           {...generateProps()}
         ></RunDetailsV2>
@@ -217,7 +221,7 @@ describe('RunDetailsV2', () => {
       render(
         <CommonTestWrapper>
           <RunDetailsV2
-            pipeline_job={JSON.stringify(v2PipelineSpec)}
+            pipeline_job={v2YamlTemplateString}
             runDetail={TEST_RUN}
             {...generateProps()}
           ></RunDetailsV2>
@@ -270,7 +274,7 @@ describe('RunDetailsV2', () => {
       render(
         <CommonTestWrapper>
           <RunDetailsV2
-            pipeline_job={JSON.stringify(v2PipelineSpec)}
+            pipeline_job={v2YamlTemplateString}
             runDetail={TEST_RUN}
             {...generateProps()}
           ></RunDetailsV2>
@@ -297,7 +301,7 @@ describe('RunDetailsV2', () => {
       render(
         <CommonTestWrapper>
           <RunDetailsV2
-            pipeline_job={JSON.stringify(v2PipelineSpec)}
+            pipeline_job={v2YamlTemplateString}
             runDetail={TEST_RUN}
             {...generateProps()}
           ></RunDetailsV2>
@@ -321,7 +325,7 @@ describe('RunDetailsV2', () => {
       render(
         <CommonTestWrapper>
           <RunDetailsV2
-            pipeline_job={JSON.stringify(v2PipelineSpec)}
+            pipeline_job={v2YamlTemplateString}
             runDetail={TEST_RUN}
             {...generateProps()}
           ></RunDetailsV2>
@@ -354,7 +358,7 @@ describe('RunDetailsV2', () => {
       render(
         <CommonTestWrapper>
           <RunDetailsV2
-            pipeline_job={JSON.stringify(v2PipelineSpec)}
+            pipeline_job={v2YamlTemplateString}
             runDetail={noCreateTimeRun}
             {...generateProps()}
           ></RunDetailsV2>
@@ -381,7 +385,7 @@ describe('RunDetailsV2', () => {
       render(
         <CommonTestWrapper>
           <RunDetailsV2
-            pipeline_job={JSON.stringify(v2PipelineSpec)}
+            pipeline_job={v2YamlTemplateString}
             runDetail={noFinsihTimeRun}
             {...generateProps()}
           ></RunDetailsV2>
@@ -392,6 +396,22 @@ describe('RunDetailsV2', () => {
 
       expect(screen.getAllByText('-').length).toEqual(2); // finish time and duration are empty.
     });
+
+    it('switches to Pipeline Spec tab', async () => {
+      render(
+        <CommonTestWrapper>
+          <RunDetailsV2
+            pipeline_job={v2YamlTemplateString}
+            runDetail={TEST_RUN}
+            {...generateProps()}
+          ></RunDetailsV2>
+        </CommonTestWrapper>,
+      );
+
+      userEvent.click(screen.getByText('Pipeline Spec'));
+      screen.findByTestId('spec-ir');
+    });
+
     it('shows Execution Sidepanel', async () => {
       const getRunSpy = jest.spyOn(Apis.runServiceApi, 'getRun');
       getRunSpy.mockResolvedValue(TEST_RUN);
@@ -401,7 +421,7 @@ describe('RunDetailsV2', () => {
       render(
         <CommonTestWrapper>
           <RunDetailsV2
-            pipeline_job={JSON.stringify(v2PipelineSpec)}
+            pipeline_job={v2YamlTemplateString}
             runDetail={TEST_RUN}
             {...generateProps()}
           ></RunDetailsV2>
@@ -432,7 +452,7 @@ describe('RunDetailsV2', () => {
       render(
         <CommonTestWrapper>
           <RunDetailsV2
-            pipeline_job={JSON.stringify(v2PipelineSpec)}
+            pipeline_job={v2YamlTemplateString}
             runDetail={TEST_RUN}
             {...generateProps()}
           ></RunDetailsV2>

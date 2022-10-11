@@ -21,6 +21,7 @@ import { ApiRun, ApiRunDetail, ApiRunStorageState } from 'src/apis/run';
 import MD2Tabs from 'src/atoms/MD2Tabs';
 import DetailsTable from 'src/components/DetailsTable';
 import { FlowElementDataBase } from 'src/components/graph/Constants';
+import { PipelineSpecTabContent } from 'src/components/PipelineSpecTabContent';
 import { RoutePage, RouteParams } from 'src/components/Router';
 import SidePanel from 'src/components/SidePanel';
 import { RuntimeNodeDetailsV2 } from 'src/components/tabs/RuntimeNodeDetailsV2';
@@ -32,7 +33,11 @@ import RunUtils from 'src/lib/RunUtils';
 import { KeyValue } from 'src/lib/StaticGraphParser';
 import { hasFinished, NodePhase } from 'src/lib/StatusUtils';
 import { formatDateString, getRunDurationFromApiRun } from 'src/lib/Utils';
-import { getNodeMlmdInfo, updateFlowElementsState } from 'src/lib/v2/DynamicFlow';
+import {
+  convertSubDagToRuntimeFlowElements,
+  getNodeMlmdInfo,
+  updateFlowElementsState,
+} from 'src/lib/v2/DynamicFlow';
 import { convertFlowElements } from 'src/lib/v2/StaticFlow';
 import * as WorkflowUtils from 'src/lib/v2/WorkflowUtils';
 import {
@@ -49,6 +54,8 @@ import { statusToIcon } from './Status';
 import DagCanvas from './v2/DagCanvas';
 
 const QUERY_STALE_TIME = 10000; // 10000 milliseconds == 10 seconds.
+const QUERY_REFETCH_INTERNAL = 10000; // 10000 milliseconds == 10 seconds.
+const TAB_NAMES = ['Graph', 'Detail', 'Pipeline Spec'];
 
 interface MlmdPackage {
   executions: Execution[];
@@ -72,8 +79,9 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
   const runId = props.match.params[RouteParams.runId];
   const runDetail = props.runDetail;
   const pipelineJobStr = props.pipeline_job;
-  const pipelineSpec = WorkflowUtils.convertJsonToV2PipelineSpec(pipelineJobStr);
+  const pipelineSpec = WorkflowUtils.convertYamlToV2PipelineSpec(pipelineJobStr);
   const elements = convertFlowElements(pipelineSpec);
+  const templateString = runDetail.run?.pipeline_spec?.pipeline_manifest;
 
   const [flowElements, setFlowElements] = useState(elements);
   const [layers, setLayers] = useState(['root']);
@@ -82,12 +90,6 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
   const [selectedNodeMlmdInfo, setSelectedNodeMlmdInfo] = useState<NodeMlmdInfo | null>(null);
   const [, forceUpdate] = useState();
   const [runFinished, setRunFinished] = useState(false);
-
-  // TODO(zijianjoy): Update elements and states when layers change.
-  const layerChange = (layers: string[]) => {
-    setSelectedNode(null);
-    setLayers(layers);
-  };
 
   const getNodeName = function(element: FlowElement<FlowElementDataBase> | null): string {
     if (element && element.data && element.data.label) {
@@ -110,6 +112,7 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
     },
     {
       staleTime: QUERY_STALE_TIME,
+      refetchInterval: QUERY_REFETCH_INTERNAL,
       onError: error =>
         props.updateBanner({
           message: 'Cannot get MLMD objects from Metadata store.',
@@ -120,8 +123,23 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
     },
   );
 
+  const layerChange = (layers: string[]) => {
+    setSelectedNode(null);
+    setLayers(layers);
+    setFlowElements(
+      convertSubDagToRuntimeFlowElements(pipelineSpec, layers, data ? data.executions : []),
+    ); // render elements in the sub-layer.
+  };
+
+  let dynamicFlowElements = flowElements;
   if (isSuccess && data) {
-    updateFlowElementsState(flowElements, data.executions, data.events, data.artifacts);
+    dynamicFlowElements = updateFlowElementsState(
+      layers,
+      flowElements,
+      data.executions,
+      data.events,
+      data.artifacts,
+    );
   }
 
   const onSelectionChange = (elements: Elements<FlowElementDataBase> | null) => {
@@ -174,14 +192,14 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
   return (
     <>
       <div className={classes(commonCss.page, padding(20, 't'))}>
-        <MD2Tabs selectedTab={selectedTab} tabs={['Graph', 'Detail']} onSwitch={setSelectedTab} />
+        <MD2Tabs selectedTab={selectedTab} tabs={TAB_NAMES} onSwitch={setSelectedTab} />
         {/* DAG tab */}
         {selectedTab === 0 && (
           <div className={commonCss.page} style={{ position: 'relative', overflow: 'hidden' }}>
             <DagCanvas
               layers={layers}
               onLayersUpdate={layerChange}
-              elements={flowElements}
+              elements={dynamicFlowElements}
               onSelectionChange={onSelectionChange}
               setFlowElements={elems => setFlowElements(elems)}
             ></DagCanvas>
@@ -195,6 +213,8 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
                 defaultWidth={'50%'}
               >
                 <RuntimeNodeDetailsV2
+                  layers={layers}
+                  onLayerChange={layerChange}
                   element={selectedNode}
                   elementMlmdInfo={selectedNodeMlmdInfo}
                   namespace={namespace}
@@ -211,6 +231,13 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
           </div>
 
           // TODO(zijianjoy): Wait backend to supply run parameters, so UI can show them.
+        )}
+
+        {/* Pipeline Spec tab */}
+        {selectedTab === 2 && (
+          <div className={commonCss.codeEditor} data-testid={'spec-ir'}>
+            <PipelineSpecTabContent templateString={templateString || ''} />
+          </div>
         )}
       </div>
     </>
@@ -292,6 +319,13 @@ function updateToolBarActions(
 }
 
 function getDetailsFields(apiRun?: ApiRun): Array<KeyValue<string>> {
+  // check if the run has finished or not. The default value for apiRun.finished_at is
+  // Date(0), when it is not specified.
+  let finishedAt = new Date(0);
+  if (apiRun?.finished_at) {
+    finishedAt = apiRun?.finished_at;
+  }
+
   return [
     ['Run ID', apiRun?.id || '-'],
     ['Workflow name', apiRun?.name || '-'],
@@ -299,7 +333,7 @@ function getDetailsFields(apiRun?: ApiRun): Array<KeyValue<string>> {
     ['Description', apiRun?.description || ''],
     ['Created at', apiRun?.created_at ? formatDateString(apiRun.created_at) : '-'],
     ['Started at', formatDateString(apiRun?.scheduled_at)],
-    ['Finished at', formatDateString(apiRun?.finished_at)],
-    ['Duration', getRunDurationFromApiRun(apiRun)],
+    ['Finished at', finishedAt > new Date(0) ? formatDateString(apiRun?.finished_at) : '-'],
+    ['Duration', finishedAt > new Date(0) ? getRunDurationFromApiRun(apiRun) : '-'],
   ];
 }

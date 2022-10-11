@@ -13,9 +13,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/golang/protobuf/jsonpb"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 
+	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
 	api "github.com/kubeflow/pipelines/backend/api/go_client"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
@@ -323,7 +323,7 @@ func validatePipelineManifest(pipelineManifest string) error {
 	if pipelineManifest != "" {
 		// Verify valid IR spec
 		spec := &pipelinespec.PipelineSpec{}
-		if err := jsonpb.UnmarshalString(pipelineManifest, spec); err != nil {
+		if err := yaml.Unmarshal([]byte(pipelineManifest), spec); err != nil {
 			return util.NewInvalidInputErrorWithDetails(err,
 				"Invalid IR spec format.")
 		}

@@ -15,8 +15,11 @@
 import { testBestPractices } from 'src/TestUtils';
 import { Workflow, WorkflowSpec, WorkflowStatus } from 'third_party/argo-ui/argo_template';
 import { getContainer, isV2Pipeline } from './WorkflowUtils';
-import * as v2PipelineSpec from 'src/data/test/mock_lightweight_python_functions_v2_pipeline.json';
 import { ComponentSpec } from 'src/generated/pipeline_spec';
+import fs from 'fs';
+
+const V2_PIPELINESPEC_PATH = 'src/data/test/lightweight_python_functions_v2_pipeline_rev.yaml';
+const v2YamlTemplateString = fs.readFileSync(V2_PIPELINESPEC_PATH, 'utf8');
 
 testBestPractices();
 describe('WorkflowUtils', () => {
@@ -45,7 +48,7 @@ describe('WorkflowUtils', () => {
   });
 
   it('get container of given component from pipelineSpec', () => {
-    const pipelineSpecStr = JSON.stringify(v2PipelineSpec);
+    const pipelineSpecStr = v2YamlTemplateString;
     const componentSpec = {} as ComponentSpec;
     componentSpec.executorLabel = 'exec-preprocess';
 
@@ -61,12 +64,12 @@ if ! [ -x "$(command -v pip)" ]; then\n\
     python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\n\
 fi\n\
 \n\
-PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location \'kfp==1.8.9\' && "$0" "$@"\n\
+PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location \'kfp==2.0.0-alpha.1\' && "$0" "$@"\n\
 ',
         'sh',
         '-ec',
-        'program_path=$(mktemp -d)\nprintf "%s" "$0" > "$program_path/ephemeral_component.py"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"\n',
-        "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef preprocess(\n    # An input parameter of type string.\n    message: str,\n    # An input parameter of type dict.\n    input_dict_parameter: Dict[str, int],\n    # An input parameter of type list.\n    input_list_parameter: List[str],\n    # Use Output[T] to get a metadata-rich handle to the output artifact\n    # of type `Dataset`.\n    output_dataset_one: Output[Dataset],\n    # A locally accessible filepath for another output artifact of type\n    # `Dataset`.\n    output_dataset_two_path: OutputPath('Dataset'),\n    # A locally accessible filepath for an output parameter of type string.\n    output_parameter_path: OutputPath(str),\n    # A locally accessible filepath for an output parameter of type bool.\n    output_bool_parameter_path: OutputPath(bool),\n    # A locally accessible filepath for an output parameter of type dict.\n    output_dict_parameter_path: OutputPath(Dict[str, int]),\n    # A locally accessible filepath for an output parameter of type list.\n    output_list_parameter_path: OutputPath(List[str]),\n):\n    \"\"\"Dummy preprocessing step.\"\"\"\n\n    # Use Dataset.path to access a local file path for writing.\n    # One can also use Dataset.uri to access the actual URI file path.\n    with open(output_dataset_one.path, 'w') as f:\n        f.write(message)\n\n    # OutputPath is used to just pass the local file path of the output artifact\n    # to the function.\n    with open(output_dataset_two_path, 'w') as f:\n        f.write(message)\n\n    with open(output_parameter_path, 'w') as f:\n        f.write(message)\n\n    with open(output_bool_parameter_path, 'w') as f:\n        f.write(\n            str(True))  # use either `str()` or `json.dumps()` for bool values.\n\n    import json\n    with open(output_dict_parameter_path, 'w') as f:\n        f.write(json.dumps(input_dict_parameter))\n\n    with open(output_list_parameter_path, 'w') as f:\n        f.write(json.dumps(input_list_parameter))\n\n",
+        'program_path=$(mktemp -d)\nprintf "%s" "$0" > "$program_path/ephemeral_component.py"\npython3 -m kfp.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"\n',
+        "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef preprocess(\n    # An input parameter of type string.\n    message: str,\n    # An input parameter of type dict.\n    input_dict_parameter: Dict[str, int],\n    # An input parameter of type list.\n    input_list_parameter: List[str],\n    # Use Output[T] to get a metadata-rich handle to the output artifact\n    # of type `Dataset`.\n    output_dataset_one: Output[Dataset],\n    # A locally accessible filepath for another output artifact of type\n    # `Dataset`.\n    output_dataset_two_path: OutputPath('Dataset'),\n    # A locally accessible filepath for an output parameter of type string.\n    output_parameter_path: OutputPath(str),\n    # A locally accessible filepath for an output parameter of type bool.\n    output_bool_parameter_path: OutputPath(bool),\n    # A locally accessible filepath for an output parameter of type dict.\n    output_dict_parameter_path: OutputPath(Dict[str, int]),\n    # A locally accessible filepath for an output parameter of type list.\n    output_list_parameter_path: OutputPath(List[str]),\n):\n    \"\"\"Dummy preprocessing step.\"\"\"\n\n    # Use Dataset.path to access a local file path for writing.\n    # One can also use Dataset.uri to access the actual URI file path.\n    with open(output_dataset_one.path, 'w') as f:\n        f.write(message)\n\n    # OutputPath is used to just pass the local file path of the output artifact\n    # to the function.\n    with open(output_dataset_two_path, 'w') as f:\n        f.write(message)\n\n    with open(output_parameter_path, 'w') as f:\n        f.write(message)\n\n    with open(output_bool_parameter_path, 'w') as f:\n        f.write(\n            str(True))  # use either `str()` or `json.dumps()` for bool values.\n\n    import json\n    with open(output_dict_parameter_path, 'w') as f:\n        f.write(json.dumps(input_dict_parameter))\n\n    with open(output_list_parameter_path, 'w') as f:\n        f.write(json.dumps(input_list_parameter))\n\n",
       ],
       image: 'python:3.7',
     });

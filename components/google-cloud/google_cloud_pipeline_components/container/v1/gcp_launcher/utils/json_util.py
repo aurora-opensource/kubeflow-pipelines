@@ -38,7 +38,15 @@ def camel_case_to_snake_case_recursive(j):
 def __remove_empty(j):
   """Remove the empty fields in the Json."""
   if isinstance(j, list):
-    return list(filter(None, [__remove_empty(i) for i in j]))
+    res = []
+    for i in j:
+      # Don't remove empty primitive types. Only remove other empty types.
+      if isinstance(i, int) or isinstance(i, float) or isinstance(
+          i, str) or isinstance(i, bool):
+        res.append(i)
+      elif __remove_empty(i):
+        res.append(__remove_empty(i))
+    return res
 
   if isinstance(j, dict):
     final_dict = {}
@@ -51,9 +59,27 @@ def __remove_empty(j):
 
 def recursive_remove_empty(j):
   """Recursively remove the empty fields in the Json until there is no empty fields and sub-fields."""
+  # Handle special case where an empty "explanation_spec" "metadata" "outputs"
+  # should not be removed. Introduced for b/245453693.
+  temp_explanation_spec_metadata_outputs = None
+  if ('explanation_spec'
+      in j) and ('metadata' in j['explanation_spec'] and
+                 'outputs' in j['explanation_spec']['metadata']):
+    temp_explanation_spec_metadata_outputs = j['explanation_spec']['metadata'][
+        'outputs']
+
   needs_update = True
   while needs_update:
     new_j = __remove_empty(j)
     needs_update = json.dumps(new_j) != json.dumps(j)
     j = new_j
+
+  if temp_explanation_spec_metadata_outputs is not None:
+    if 'explanation_spec' not in j:
+      j['explanation_spec'] = {}
+    if 'metadata' not in j['explanation_spec']:
+      j['explanation_spec']['metadata'] = {}
+    j['explanation_spec']['metadata'][
+        'outputs'] = temp_explanation_spec_metadata_outputs
+
   return j

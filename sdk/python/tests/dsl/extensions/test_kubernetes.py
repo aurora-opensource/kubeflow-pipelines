@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from kfp.dsl import ContainerOp
-from kfp.dsl.extensions.kubernetes import use_secret
 import unittest
-import inspect
+
+from kfp.deprecated.dsl import ContainerOp
+from kfp.deprecated.dsl.extensions.kubernetes import use_secret
 
 
 class TestAddSecrets(unittest.TestCase):

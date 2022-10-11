@@ -16,10 +16,14 @@ def pytest_addoption(parser):
         help="AWS region where test will run",
     )
     parser.addoption(
-        "--sagemaker-role-arn", required=True, help="SageMaker execution IAM role ARN",
+        "--sagemaker-role-arn",
+        required=True,
+        help="SageMaker execution IAM role ARN",
     )
     parser.addoption(
-        "--robomaker-role-arn", required=True, help="RoboMaker execution IAM role ARN",
+        "--robomaker-role-arn",
+        required=True,
+        help="RoboMaker execution IAM role ARN",
     )
     parser.addoption(
         "--assume-role-arn",
@@ -164,7 +168,7 @@ def experiment_id(kfp_client, tmp_path_factory, worker_id):
         return get_experiment_id(kfp_client)
 
     # Locking taking as an example from
-    # https://github.com/pytest-dev/pytest-xdist#making-session-scoped-fixtures-execute-only-once
+    # https://pytest-xdist.readthedocs.io/en/latest/how-to.html#making-session-scoped-fixtures-execute-only-once
     # get the temp directory shared by all workers
     root_tmp_dir = tmp_path_factory.getbasetemp().parent
 
