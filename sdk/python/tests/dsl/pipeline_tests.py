@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import kfp
-from kfp.dsl import Pipeline, PipelineParam, ContainerOp, pipeline
-from kfp.dsl._metadata import _extract_pipeline_metadata
-from kfp.dsl.types import GCSPath, Integer
-from kfp.components.structures import ComponentSpec, InputSpec
 import unittest
+
+from kfp.deprecated.components.structures import ComponentSpec
+from kfp.deprecated.components.structures import InputSpec
+from kfp.deprecated.dsl import ContainerOp
+from kfp.deprecated.dsl import Pipeline
+from kfp.deprecated.dsl import pipeline
+from kfp.deprecated.dsl._metadata import _extract_pipeline_metadata
+from kfp.deprecated.dsl.types import Integer
 
 
 class TestPipeline(unittest.TestCase):

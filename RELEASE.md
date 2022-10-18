@@ -184,7 +184,7 @@ Note, when releasing from master, all the below mentions of "release branch" mea
     - `1.0.1`
     - `1.1.0`
     - ...
-    Set the version by using `VERSION=<version-value>`. Contact @Bobgy if you are not sure what next version should be.
+    Set the version by using `VERSION=<version-value>`. Contact @chensun if you are not sure what next version should be.
 
 1. Update all version refs in release branch by
 
@@ -234,7 +234,7 @@ and then "Retry", because after waiting for previous step, artifacts are now rea
 
     ```bash
     git checkout $BRANCH
-    git pull upstream
+    git pull upstream $BRANCH
     cd backend/api/python_http_client
     rm -r dist
     python3 setup.py --quiet sdist
@@ -278,10 +278,10 @@ fill in the description. Detailed steps:
        <pre>
         To deploy Kubeflow Pipelines in an existing cluster, follow the instruction in [here](https://www.kubeflow.org/docs/pipelines/standalone-deployment-gcp/).
 
-        Install kfp-server-api package (python 3.6 above) by running:
+        Install kfp-server-api package (python 3.7 above) by running:
 
         ```bash
-        python3 -m pip install kfp-server-api==1.7.0 --upgrade
+        python3 -m pip install kfp-server-api==$VERSION --upgrade
         ```
 
         Refer to:

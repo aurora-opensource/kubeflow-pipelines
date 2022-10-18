@@ -13,13 +13,15 @@
 # limitations under the License.
 """GCP launcher for Dataproc Batch workloads."""
 
+import datetime
 import json
 import logging
 import os
 from os import path
 import re
 import time
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Union
+import uuid
 
 import google.auth.transport.requests
 from google_cloud_pipeline_components.proto import gcp_resources_pb2
@@ -27,6 +29,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from requests.sessions import Session
 from urllib3.util.retry import Retry
+from ...utils import execution_context
 from .utils import json_util
 
 from google.protobuf import json_format
@@ -75,14 +78,6 @@ class DataprocBatchRemoteRunner():
     session.mount('https://', adapter)
     return session
 
-  def _refresh_session_auth(self) -> None:
-    """Refreshes credentials in the http session."""
-    if not self._creds.valid:
-      self._creds.refresh(google.auth.transport.requests.Request())
-    self._session.headers.update({
-        'Authorization': 'Bearer '+ self._creds.token
-    })
-
   def _get_resource(self, url: str) -> Dict[str, Any]:
     """GET a http request.
 
@@ -95,19 +90,32 @@ class DataprocBatchRemoteRunner():
     Raises:
       RuntimeError: Failed to get or parse the http response.
     """
-    self._refresh_session_auth()
-    result = self._session.get(url)
-    try:
-      result.raise_for_status()
-      return result.json()
-    except requests.exceptions.HTTPError as err:
-      raise RuntimeError('Failed to GET resource: {}. Error response:\n{}'
-                         .format(url, result)) from err
-    except json.decoder.JSONDecodeError as err:
-      raise RuntimeError('Failed to decode JSON from response: {}'
-                         .format(result)) from err
+    if not self._creds.valid:
+      self._creds.refresh(google.auth.transport.requests.Request())
+    headers = {'Authorization': 'Bearer '+ self._creds.token}
 
-  def _create_resource(self, url: str, post_data: str) -> Dict[str, Any]:
+    result = self._session.get(url, headers=headers)
+    json_data = {}
+    try:
+      json_data = result.json()
+      result.raise_for_status()
+      return json_data
+    except requests.exceptions.HTTPError as err:
+      try:
+        err_msg = ('Error {} returned from GET: {}. Status: {}, Message: {}'
+                   .format(err.response.status_code,
+                           err.request.url,
+                           json_data['error']['status'],
+                           json_data['error']['message']))
+      except (KeyError, TypeError):
+        err_msg = err.response.text
+      raise RuntimeError(err_msg) from err
+
+    except json.decoder.JSONDecodeError as err:
+      raise RuntimeError('Failed to decode JSON from response:\n{}'
+                         .format(err.doc)) from err
+
+  def _post_resource(self, url: str, post_data: str) -> Dict[str, Any]:
     """POST a http request.
 
     Args:
@@ -120,18 +128,38 @@ class DataprocBatchRemoteRunner():
     Raises:
       RuntimeError: Failed to get or parse the http response.
     """
-    self._refresh_session_auth()
-    result = self._session.post(url=url, data=post_data)
+    if not self._creds.valid:
+      self._creds.refresh(google.auth.transport.requests.Request())
+    headers = {'Authorization': 'Bearer '+ self._creds.token}
+
+    result = self._session.post(url=url, data=post_data, headers=headers)
+    json_data = {}
     try:
-      result.raise_for_status()
       json_data = result.json()
+      result.raise_for_status()
       return json_data
     except requests.exceptions.HTTPError as err:
-      raise RuntimeError('Failed to POST resource: {}. Error response:\n{}'
-                         .format(url, result)) from err
+      try:
+        err_msg = ('Error {} returned from POST: {}. Status: {}, Message: {}'
+                   .format(err.response.status_code,
+                           err.request.url,
+                           json_data['error']['status'],
+                           json_data['error']['message']))
+      except (KeyError, TypeError):
+        err_msg = err.response.text
+      raise RuntimeError(err_msg) from err
     except json.decoder.JSONDecodeError as err:
-      raise RuntimeError('Failed to decode JSON from response: {}'
-                         .format(result)) from err
+      raise RuntimeError('Failed to decode JSON from response:\n{}'
+                         .format(err.doc)) from err
+
+  def _cancel_batch(self, lro_name) -> None:
+    """Cancels a Dataproc batch workload."""
+    if not lro_name:
+      return
+    # Dataproc Operation Cancel API:
+    # https://cloud.google.com/dataproc/docs/reference/rest/v1/projects.regions.operations/cancel
+    lro_uri = f'{_DATAPROC_URI_PREFIX}/{lro_name}:cancel'
+    self._post_resource(lro_uri, '')
 
   def check_if_operation_exists(self) -> Union[Dict[str, Any], None]:
     """Check if a Dataproc Batch operation already exists.
@@ -190,20 +218,25 @@ class DataprocBatchRemoteRunner():
     Returns:
       Dict of the long-running Operation resource. For more details, see:
          https://cloud.google.com/dataproc/docs/reference/rest/v1/projects.regions.operations#resource:-operation
-    """
-    while ("done" not in lro) or (not lro['done']):
-      time.sleep(poll_interval_seconds)
-      lro_name = lro['name']
-      lro_uri = f'{_DATAPROC_URI_PREFIX}/{lro_name}'
-      lro = self._get_resource(lro_uri)
-      logging.info('Polled operation: %s', lro_name)
 
-    if 'error' in lro and lro['error']['code']:
-      raise RuntimeError(
-          "Operation failed. Error: {}".format(lro["error"]))
-    else:
-      logging.info('Operation complete: %s', lro)
-      return lro
+    Raises:
+      RuntimeError: Operation resource indicates an error.
+    """
+    lro_name = lro['name']
+    lro_uri = f'{_DATAPROC_URI_PREFIX}/{lro_name}'
+    with execution_context.ExecutionContext(
+        on_cancel=lambda: self._cancel_batch(lro_name)):
+      while ('done' not in lro) or (not lro['done']):
+        time.sleep(poll_interval_seconds)
+        lro = self._get_resource(lro_uri)
+        logging.info('Polled operation: %s', lro_name)
+
+      if 'error' in lro and lro['error']['code']:
+        raise RuntimeError(
+            'Operation failed. Error: {}'.format(lro['error']))
+      else:
+        logging.info('Operation complete: %s', lro)
+        return lro
 
   def create_batch(
       self,
@@ -223,7 +256,7 @@ class DataprocBatchRemoteRunner():
     """
     # Create the Batch resource.
     create_batch_url = f'https://dataproc.googleapis.com/v1/projects/{self._project}/locations/{self._location}/batches/?batchId={batch_id}'
-    lro = self._create_resource(create_batch_url, json.dumps(batch_request))
+    lro = self._post_resource(create_batch_url, json.dumps(batch_request))
     lro_name = lro['name']
 
     # Write the Operation resource uri to the gcp_resources output file.
@@ -242,7 +275,7 @@ def _create_batch(
     project: str,
     location: str,
     batch_id: str,
-    payload: Optional[str],
+    payload: str,
     gcp_resources: str,
 ) -> Dict[str, Any]:
   """Common function for creating Dataproc Batch workloads.
@@ -265,11 +298,14 @@ def _create_batch(
         json.loads(payload, strict=False))
   except json.decoder.JSONDecodeError as err:
     raise RuntimeError('Failed to decode JSON from payload: {}'
-                       .format(payload)) from err
+                       .format(err.doc)) from err
 
   remote_runner = DataprocBatchRemoteRunner(type, project, location, gcp_resources)
   lro = remote_runner.check_if_operation_exists()
   if not lro:
+    if not batch_id:
+      now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+      batch_id = '-'.join([type.lower(), now, uuid.uuid4().hex[:8]])
     lro = remote_runner.create_batch(batch_id, batch_request)
   # Wait for the Batch workload to finish.
   return remote_runner.wait_for_batch(lro, _POLL_INTERVAL_SECONDS)

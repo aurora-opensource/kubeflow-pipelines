@@ -5,29 +5,53 @@ export interface Feature {
 }
 
 export enum FeatureKey {
-  V2 = 'v2',
+  V2 = 'v2', // Please start using V2_ALPHA instead of V2, because we have switched to V2_ALPHA as V2 feature is enabled by default.
+  V2_ALPHA = 'v2_alpha',
 }
 
 const FEATURE_V2 = {
   name: FeatureKey.V2,
-  description: 'Show v2 features',
+  description: 'Show v2 features.',
   active: false,
 };
 
-const features: Feature[] = [FEATURE_V2];
+const FEATURE_V2_ALPHA = {
+  name: FeatureKey.V2_ALPHA,
+  description: 'Show v2 features, enabled by default starting at V2_ALPHA phase.',
+  active: true,
+};
+
+const features: Feature[] = [FEATURE_V2, FEATURE_V2_ALPHA];
 
 declare global {
   var __FEATURE_FLAGS__: string;
 }
 
 export function initFeatures() {
+  let updatedFeatures = features;
   if (!storageAvailable('localStorage')) {
     window.__FEATURE_FLAGS__ = JSON.stringify(features);
     return;
   }
-  if (!localStorage.getItem('flags')) {
-    localStorage.setItem('flags', JSON.stringify(features));
+  if (localStorage.getItem('flags')) {
+    const originalFlags = localStorage.getItem('flags');
+    let originalFlagsJSON: Feature[] = [];
+    try {
+      originalFlagsJSON = JSON.parse(originalFlags!);
+      let originalFlagsMap = new Map(originalFlagsJSON.map(features => [features.name, features]));
+      for (let i = 0; i < updatedFeatures.length; i++) {
+        const feature = originalFlagsMap.get(updatedFeatures[i].name);
+        if (feature) {
+          updatedFeatures[i].active = feature.active;
+        }
+      }
+    } catch (e) {
+      console.warn(
+        'Original feature flags format is null or not recognizable, overwriting with default feature flags.',
+      );
+    }
   }
+  localStorage.setItem('flags', JSON.stringify(updatedFeatures));
   const flags = localStorage.getItem('flags');
   if (flags) {
     window.__FEATURE_FLAGS__ = flags;

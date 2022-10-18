@@ -1,10 +1,12 @@
 #!/bin/bash
 
-# Install Pip Packages
-pip install captum torchvision matplotlib pillow pytorch-lightning flask flask-compress ipywidgets minio
-
 # Install Yarn
-npm install
+conda install -c conda-forge yarn -y
+
+# Install Pip Packages
+pip install captum torchvision matplotlib pillow pytorch-lightning ipywidgets minio 
+
+pip install Werkzeug==2.0.0 flask flask-compress
 
 # Install Jupyter Notebook Widgets
 jupyter nbextension install --py --symlink --sys-prefix captum.insights.attr_vis.widget

@@ -1,4 +1,3 @@
-# Lint as: python3
 # Copyright 2019 The Kubeflow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License,Version 2.0 (the "License");
@@ -17,6 +16,7 @@
 from typing import Text
 import unittest
 from unittest import mock
+
 from kfp.cli.diagnose_me import gcp
 from kfp.cli.diagnose_me import utility
 

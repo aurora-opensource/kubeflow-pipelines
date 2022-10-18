@@ -1,4 +1,6 @@
-# Copyright 2018 The Kubeflow Authors
+"""The `kfp.compiler` module contains the compiler for compiling pipeline
+definitions."""
+# Copyright 2020 The Kubeflow Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,5 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .compiler import Compiler
-from ..containers._component_builder import build_python_component, build_docker_image, VersionedDependency
+__all__ = [
+    'Compiler',
+]
+from kfp.compiler.compiler import Compiler

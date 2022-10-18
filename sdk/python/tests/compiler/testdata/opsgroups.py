@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import kfp
-import kfp.dsl as dsl
+import kfp.deprecated.dsl as dsl
 
 
 @dsl.graph_component

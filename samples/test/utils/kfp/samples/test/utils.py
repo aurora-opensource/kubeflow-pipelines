@@ -17,26 +17,29 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sys
-import time
 import random
-import tempfile
 import subprocess
-from dataclasses import dataclass, asdict
+import sys
+import tempfile
+import time
+import unittest
+from dataclasses import asdict
+from dataclasses import dataclass
 from pprint import pprint
 from typing import Callable, Optional
-import unittest
-from google.protobuf.json_format import MessageToDict
-import nbformat
-from nbconvert import PythonExporter
 
 import kfp
-from kfp.onprem import add_default_resource_spec
-import kfp.v2.compiler
+import kfp.compiler
 import kfp_server_api
+import nbformat
+from google.protobuf.json_format import MessageToDict
+from kfp.deprecated.onprem import add_default_resource_spec
 from ml_metadata import metadata_store
 from ml_metadata.metadata_store.metadata_store import ListOptions
-from ml_metadata.proto import Event, Execution, metadata_store_pb2
+from ml_metadata.proto import Event
+from ml_metadata.proto import Execution
+from ml_metadata.proto import metadata_store_pb2
+from nbconvert import PythonExporter
 
 MINUTE = 60
 
@@ -66,7 +69,8 @@ Verifier = Callable[[
 
 @dataclass
 class TestCase:
-    """Test case for running a KFP sample. One of pipeline_func or pipeline_file is required.
+    """Test case for running a KFP sample. One of pipeline_func or
+    pipeline_file is required.
 
     :param run_pipeline: when False, it means the test case just runs the python file.
     :param pipeline_file_compile_path: when specified, the pipeline file can compile
@@ -76,7 +80,7 @@ class TestCase:
     pipeline_func: Optional[Callable] = None
     pipeline_file: Optional[str] = None
     pipeline_file_compile_path: Optional[str] = None
-    mode: kfp.dsl.PipelineExecutionMode = kfp.dsl.PipelineExecutionMode.V2_COMPATIBLE
+    mode: kfp.deprecated.dsl.PipelineExecutionMode = kfp.deprecated.dsl.PipelineExecutionMode.V1_LEGACY
     enable_caching: bool = False
     arguments: Optional[dict[str, str]] = None
     verify_func: Verifier = _default_verify_func
@@ -96,7 +100,8 @@ def run_pipeline_func(test_cases: list[TestCase]):
 
     def test_wrapper(
         run_pipeline: Callable[[
-            Callable, str, str, kfp.dsl.PipelineExecutionMode, bool, dict, bool
+            Callable, str, str, kfp.deprecated.dsl
+            .PipelineExecutionMode, bool, dict, bool
         ], kfp_server_api.ApiRunDetail],
         mlmd_connection_config: metadata_store_pb2.MetadataStoreClientConfig,
     ):
@@ -111,7 +116,11 @@ def run_pipeline_func(test_cases: list[TestCase]):
                     'TestCase must have exactly one of pipeline_file or pipeline_func specified, got both.'
                 )
             if case.pipeline_func:
-                pipeline_name = case.pipeline_func._component_human_name
+                # TODO: remove accessing of protected member
+                pipeline_name = getattr(
+                    case.pipeline_func, 'name',
+                    getattr(case.pipeline_func, '_component_human_name',
+                            'pipeline'))
             else:
                 pipeline_name = os.path.basename(case.pipeline_file)
             if not case.run_pipeline:
@@ -120,14 +129,14 @@ def run_pipeline_func(test_cases: list[TestCase]):
                         'TestCase.run_pipeline = False can only be specified when used together with pipeline_file.'
                     )
 
-            if case.mode == kfp.dsl.PipelineExecutionMode.V2_COMPATIBLE:
+            if case.mode == kfp.deprecated.dsl.PipelineExecutionMode.V2_COMPATIBLE:
                 print(
                     f'Unexpected v2 compatible mode test for: {pipeline_name}')
                 raise RuntimeError
 
-            if case.mode == kfp.dsl.PipelineExecutionMode.V2_ENGINE:
+            if case.mode == kfp.deprecated.dsl.PipelineExecutionMode.V2_ENGINE:
                 print(f'Running v2 engine mode test for: {pipeline_name}')
-            if case.mode == kfp.dsl.PipelineExecutionMode.V1_LEGACY:
+            if case.mode == kfp.deprecated.dsl.PipelineExecutionMode.V1_LEGACY:
                 print(f'Running v1 legacy test for: {pipeline_name}')
 
             run_detail = run_pipeline(
@@ -152,7 +161,7 @@ def run_pipeline_func(test_cases: list[TestCase]):
             tasks = {}
             client = None
             # we cannot stably use MLMD to query status in v1, because it may be async.
-            if case.mode == kfp.dsl.PipelineExecutionMode.V2_ENGINE:
+            if case.mode == kfp.deprecated.dsl.PipelineExecutionMode.V2_ENGINE:
                 client = KfpMlmdClient(
                     mlmd_connection_config=mlmd_connection_config)
                 tasks = client.get_tasks(run_id=run_detail.run.id)
@@ -173,7 +182,8 @@ def run_pipeline_func(test_cases: list[TestCase]):
 
 
 def debug_verify(run_id: str, verify_func: Verifier):
-    '''Debug a verify function quickly using MLMD data from an existing KFP run ID.'''
+    """Debug a verify function quickly using MLMD data from an existing KFP run
+    ID."""
     t = unittest.TestCase()
     t.maxDiff = None  # we always want to see full diff
     client = KfpMlmdClient()
@@ -216,10 +226,11 @@ def _run_test(callback):
         metadata_service_host: Optional[str] = None,
         metadata_service_port: int = 8080,
     ):
-        """Test file CLI entrypoint used by Fire.
-        To configure KFP endpoint, configure env vars following:
-        https://www.kubeflow.org/docs/components/pipelines/sdk/connect-api/#configure-sdk-client-by-environment-variables.
-        KFP UI endpoint can be configured by KF_PIPELINES_UI_ENDPOINT env var.
+        """Test file CLI entrypoint used by Fire. To configure KFP endpoint,
+        configure env vars following:
+        https://www.kubeflow.org/docs/components/pipelines/sdk/connect-
+        api/#configure-sdk-client-by-environment-variables. KFP UI endpoint can
+        be configured by KF_PIPELINES_UI_ENDPOINT env var.
 
         :param pipeline_root: pipeline root that holds intermediate
         artifacts, example gs://your-bucket/path/to/workdir.
@@ -259,7 +270,7 @@ def _run_test(callback):
             if not driver_image:
                 raise Exception("driver_image is empty")
         logger.info(f'KFP_DRIVER_IMAGE={driver_image}')
-        client = kfp.Client()
+        client = kfp.deprecated.Client()
         # TODO(Bobgy): avoid using private fields when getting loaded config
         kfp_endpoint = client._existing_config.host
         kfp_ui_endpoint = client._uihost
@@ -271,8 +282,8 @@ def _run_test(callback):
             pipeline_func: Optional[Callable],
             pipeline_file: Optional[str],
             pipeline_file_compile_path: Optional[str],
-            mode: kfp.dsl.PipelineExecutionMode = kfp.dsl.PipelineExecutionMode
-            .V2_ENGINE,
+            mode: kfp.deprecated.dsl.PipelineExecutionMode = kfp.deprecated.dsl
+            .PipelineExecutionMode.V2_ENGINE,
             enable_caching: bool = False,
             arguments: Optional[dict] = None,
             dry_run: bool = False,  # just compile the pipeline without running it
@@ -281,7 +292,7 @@ def _run_test(callback):
             arguments = arguments or {}
 
             def _create_run():
-                if mode == kfp.dsl.PipelineExecutionMode.V2_ENGINE:
+                if mode == kfp.deprecated.dsl.PipelineExecutionMode.V2_ENGINE:
                     return run_v2_pipeline(
                         client=client,
                         fn=pipeline_func,
@@ -295,7 +306,7 @@ def _run_test(callback):
                         },
                     )
                 else:
-                    conf = kfp.dsl.PipelineConf()
+                    conf = kfp.deprecated.dsl.PipelineConf()
                     conf.add_op_transformer(
                         # add a default resource request & limit to all container tasks
                         add_default_resource_spec(
@@ -303,7 +314,7 @@ def _run_test(callback):
                             cpu_limit='1',
                             memory_limit='512Mi',
                         ))
-                    if mode == kfp.dsl.PipelineExecutionMode.V1_LEGACY:
+                    if mode == kfp.deprecated.dsl.PipelineExecutionMode.V1_LEGACY:
                         conf.add_op_transformer(_disable_cache)
                     if pipeline_func:
                         return client.create_run_from_pipeline_func(
@@ -329,7 +340,8 @@ def _run_test(callback):
                         else:
                             package_path = tempfile.mktemp(
                                 suffix='.yaml', prefix="kfp_package")
-                            from kfp.compiler.main import compile_pyfile
+                            from kfp.deprecated.compiler.main import \
+                                compile_pyfile
                             compile_pyfile(
                                 pyfile=pyfile,
                                 output_path=package_path,
@@ -377,7 +389,7 @@ def _run_test(callback):
 
 
 def run_v2_pipeline(
-    client: kfp.Client,
+    client: kfp.deprecated.Client,
     fn: Optional[Callable],
     file: Optional[str],
     driver_image: Optional[str],
@@ -389,15 +401,15 @@ def run_v2_pipeline(
     original_pipeline_spec = tempfile.mktemp(
         suffix='.json', prefix="original_pipeline_spec")
     if fn:
-        kfp.v2.compiler.Compiler().compile(
+        kfp.compiler.Compiler().compile(
             pipeline_func=fn, package_path=original_pipeline_spec)
     else:
         pyfile = file
         if file.endswith(".ipynb"):
             pyfile = tempfile.mktemp(suffix='.py', prefix="pipeline_py_code")
             _nb_sample_to_py(file, pyfile)
-        from kfp.v2.compiler.main import compile_pyfile
-        compile_pyfile(pyfile=pyfile, package_path=original_pipeline_spec)
+        from kfp.cli.compile import dsl_compile
+        dsl_compile(py=pyfile, output=original_pipeline_spec)
 
     # remove following overriding logic once we use create_run_from_job_spec to trigger kfp pipeline run
     with open(original_pipeline_spec) as f:
@@ -714,14 +726,17 @@ def _parse_parameters(execution: metadata_store_pb2.Execution) -> dict:
 
 def _disable_cache(task):
     # Skip tasks which are not container ops.
-    if not isinstance(task, kfp.dsl.ContainerOp):
+    if not isinstance(task, kfp.deprecated.dsl.ContainerOp):
         return task
     task.execution_options.caching_strategy.max_cache_staleness = "P0D"
     return task
 
 
 def _nb_sample_to_py(notebook_path: str, output_path: str):
-    """nb_sample_to_py converts notebook kfp sample to a python file. Cells with tag "skip-in-test" will be omitted."""
+    """nb_sample_to_py converts notebook kfp sample to a python file.
+
+    Cells with tag "skip-in-test" will be omitted.
+    """
     with open(notebook_path, 'r') as f:
         nb = nbformat.read(f, as_version=4)
         # Cells with skip-in-test tag will be omitted.

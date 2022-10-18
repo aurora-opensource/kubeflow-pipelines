@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
 from typing import Callable
+import unittest
 
-import kfp
-from kfp import LocalClient, run_pipeline_func_locally
+from kfp.deprecated import LocalClient
+from kfp.deprecated import run_pipeline_func_locally
+import kfp.deprecated as kfp
 
 InputPath = kfp.components.InputPath()
 OutputPath = kfp.components.OutputPath()
@@ -226,16 +227,14 @@ class LocalRunnerTest(unittest.TestCase):
 
         def _pipeline():
             check_option()
-        
+
         run_result = run_pipeline_func_locally(
-            _pipeline,
-            {},
-            execution_mode=LocalClient.ExecutionMode(mode="docker",
-                                                    docker_options=["-e", "foo=bar"])
-        )
+            _pipeline, {},
+            execution_mode=LocalClient.ExecutionMode(
+                mode="docker", docker_options=["-e", "foo=bar"]))
         assert run_result.success
         output_file_path = run_result.get_output_file("check-option")
-    
+
         with open(output_file_path, "r") as f:
             line = f.readline()
             assert "bar" in line

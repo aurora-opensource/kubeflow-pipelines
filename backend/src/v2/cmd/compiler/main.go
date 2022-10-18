@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -109,8 +109,12 @@ func loadSpec(path string) (*pipelinespec.PipelineJob, error) {
 		return nil, err
 	}
 	spec := &pipelinespec.PipelineSpec{}
-	if err := protojson.Unmarshal(bytes, spec); err != nil {
-		return nil, fmt.Errorf("Failed to parse pipeline spec, error: %s, spec: %v", err, string(bytes))
+	specJson, err := yaml.YAMLToJSON(bytes)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to convert pipeline spec from yaml to json, error: %s, spec: %v", err, string(bytes))
+	}
+	if err := protojson.Unmarshal(specJson, spec); err != nil {
+		return nil, fmt.Errorf("Failed to parse pipeline spec, error: %s, spec: %v", err, string(specJson))
 	}
 	return jobFromSpec(spec)
 }

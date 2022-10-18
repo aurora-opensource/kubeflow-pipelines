@@ -15,6 +15,16 @@ The API server itself can be built using:
 go build -o /tmp/apiserver backend/src/apiserver/*.go
 ```
 
+## Code Style
+
+Use [gofmt](https://pkg.go.dev/cmd/gofmt) package to format your .go source files. There is no need to format the swagger generated go clients, so only run the following command in `./backend/src` and `./backend/test` folder.
+
+```
+go fmt ./...
+```
+
+For more information, see [this blog](https://go.dev/blog/gofmt).
+
 ## Building APIServer image locally
 
 The API server image can be built from the root folder of the repo using: 
@@ -38,8 +48,8 @@ need to be regenerated and checked-in. Refer to [backend/api](./api/README.md) f
 
 ## Updating licenses info
 
-1. Install go-licenses tool from https://github.com/chensun/go-licenses/releases/tag/v0.1.1-2022-01-20,
-and refer to its documentation for how to use it.
+1. [Install go-licenses tool](../hack/install-go-licenses.sh) and refer to [its documentation](https://github.com/google/go-licenses) for how to use it.
+
 
 2. Run the tool to update all licenses:
 
@@ -55,3 +65,11 @@ and refer to its documentation for how to use it.
 dependencies. To update dependencies, edit [requirements.in](requirements.in)
 and run `./update_requirements.sh` to update and pin the transitive
 dependencies.
+
+
+## Building conformance tests (WIP)
+
+Run
+```
+docker build . -f backend/Dockerfile.conformance -t <tag>
+```
