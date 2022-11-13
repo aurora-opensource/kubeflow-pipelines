@@ -56,6 +56,19 @@ func (t *Argo) RunWorkflow(apiRun *api.Run, options RunWorkflowOptions) (util.Ex
 	}
 	workflow.SetPodMetadataLabels(util.LabelKeyWorkflowRunId, options.RunId)
 
+	// Aurora: upstream has ValidateWorkflow as part of NewWorkflow. That would fail
+	// for us because we do have argo macros that need the annotation we add just before here.
+	// We moved the check to after the workflow has been properly augmented w/ all needed
+	// annotations.
+	_, err = validate.ValidateWorkflow(nil, nil, workflow.Get(), validate.ValidateOpts{
+		Lint:                       true,
+		IgnoreEntrypoint:           true,
+		WorkflowTemplateValidation: false, // not used by kubeflow
+	})
+	if err != nil {
+		return nil, util.NewInternalServerError(err, "Failed to validate workflow")
+	}
+
 	// Marking auto-added artifacts as optional. Otherwise most older workflows will start failing after upgrade to Argo 2.3.
 	// TODO: Fix the components to explicitly declare the artifacts they really output.
 	for templateIdx, template := range workflow.Workflow.Spec.Templates {
@@ -187,13 +200,11 @@ func ValidateWorkflow(template []byte) (*util.Workflow, error) {
 	if wf.Kind != argoK8sResource {
 		return nil, util.NewInvalidInputError("Unexpected resource type. Expected: %v. Received: %v", argoK8sResource, wf.Kind)
 	}
-	_, err = validate.ValidateWorkflow(nil, nil, &wf, validate.ValidateOpts{
-		Lint:                       true,
-		IgnoreEntrypoint:           true,
-		WorkflowTemplateValidation: false, // not used by kubeflow
-	})
-	if err != nil {
-		return nil, err
-	}
+	// Aurora: we do not call validate.ValidateWorkflow here because we haven't
+	// injected the run_name annotation yet.
+	// the check is moved to RunWorkflow, in this same file, just after annotations and
+	// labels are injected.
+	// this comment is left as a note to help with future conflict resolutions with
+	// upstream
 	return util.NewWorkflow(&wf), nil
 }
