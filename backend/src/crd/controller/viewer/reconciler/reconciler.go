@@ -196,6 +196,10 @@ func setPodSpecForTensorboard(view *viewerV1beta1.Viewer, s *corev1.PodSpec) {
 	} else {
 		c.Args = append(c.Args, fmt.Sprintf("--logdir=%s", view.Spec.TensorboardSpec.LogDir))
 	}
+	// Set a reload interval of two minutes because the default of 5 seconds costs can be very
+	// high when pulling data from Cloud Storage systems. See the tensorboard bug about reading
+	// from s3.  https://github.com/tensorflow/tensorboard/issues/6564
+	c.Args = append(c.Args, "--reload_interval=120")
 
 	c.Ports = []corev1.ContainerPort{
 		{ContainerPort: viewerTargetPort},
